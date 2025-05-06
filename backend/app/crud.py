@@ -23,6 +23,13 @@ def get_hackathons():
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+def get_hackathon_by_id(hackathon_id: int):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM hackathons WHERE id = ?", (hackathon_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
 def update_hackathon_status(hackathon_id: int, fields: dict):
     with get_db() as conn:
         cursor = conn.cursor()
@@ -58,10 +65,14 @@ def check_and_update_hackathons():
         if updates:
             logger.info(f"Updating hackathon {hackathon['id']} with {updates}")
             update_hackathon_status(hackathon['id'], updates)
+            # Fetch the updated hackathon to check if all milestones are complete
+            updated_hackathon = get_hackathon_by_id(hackathon['id'])
+            if updated_hackathon and all(updated_hackathon[m] for m in ["invitation_sent", "registration_ended", "submission_deadline", "judging_period", "thank_you_sent"]):
+                logger.info(f"Deleting hackathon {hackathon['id']} - all milestones complete")
+                delete_hackathon(hackathon["id"])
         else:
             logger.info(f"No updates for hackathon {hackathon['id']}")
-        
-        # Delete if all milestones are complete
-        if all(hackathon[m] for m in ["invitation_sent", "registration_ended", "submission_deadline", "judging_period", "thank_you_sent"]):
-            logger.info(f"Deleting hackathon {hackathon['id']} - all milestones complete")
-            delete_hackathon(hackathon["id"])
+            # Still check if all milestones are complete (in case they were already complete)
+            if all(hackathon[m] for m in ["invitation_sent", "registration_ended", "submission_deadline", "judging_period", "thank_you_sent"]):
+                logger.info(f"Deleting hackathon {hackathon['id']} - all milestones complete")
+                delete_hackathon(hackathon["id"])
